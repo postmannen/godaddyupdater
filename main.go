@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 // getPublicIP will get the public ip from ipify.org
@@ -31,6 +32,7 @@ func getPublicIP() (string, error) {
 	return string(ip), nil
 }
 
+// getgodaddyCurrentIP will retrieve the currently registered ip address for a domain at godaddy.
 func getGodaddyCurrentIP(key string, secret string) (string, error) {
 	httpClient := &http.Client{}
 	// Create a get request
@@ -66,6 +68,7 @@ func getGodaddyCurrentIP(key string, secret string) (string, error) {
 }
 
 func setGodaddyCurrentIP(key string, secret string, apiURL string, gdData string) error {
+	// Prepare the http client
 	httpClient := &http.Client{}
 	// Create a new POST request, and prepare it with the POST data.
 	req, err := http.NewRequest("PUT", apiURL, strings.NewReader(gdData))
@@ -76,6 +79,7 @@ func setGodaddyCurrentIP(key string, secret string, apiURL string, gdData string
 	req.Header.Set("Authorization", "sso-key "+key+":"+secret)
 	req.Header.Set("Content-Type", "application/json")
 
+	// Execute the http request, and set new ip.
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed doing POST: %v", err)
@@ -85,6 +89,7 @@ func setGodaddyCurrentIP(key string, secret string, apiURL string, gdData string
 
 	defer resp.Body.Close()
 
+	// Read the response, and check if all went OK.
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Println("error: failed reading the response body of the POST: ", err)
@@ -96,6 +101,7 @@ func setGodaddyCurrentIP(key string, secret string, apiURL string, gdData string
 
 }
 
+// goDaddyData reflects how godaddy wants the data in JSON format.
 type goDaddyData struct {
 	Data string `json:"data"`
 	TTL  int    `json:"ttl"`
@@ -103,49 +109,68 @@ type goDaddyData struct {
 
 // run will orchestrate the checks for finding out if ip's are changed,
 // and change it at godaddy if changed.
-func run(key string, secret string) error {
-	// Get the current public ip of your connection.
-	pIP, err := getPublicIP()
-	if err != nil {
-		log.Println("error: public ip: ", err)
-		return err
-	}
-	log.Printf("My IP is:%s\n", pIP)
+func run(key string, secret string, checkInterval int) {
+	// Convert the check interval from int to Duration.
+	interval := time.Duration(checkInterval) * time.Second
+	pIPCh := make(chan string)
 
 	// get current ip registered at godaddy.
 	gIP, err := getGodaddyCurrentIP(key, secret)
-	log.Printf("Current godaddy ip for dev.erter.org = %v\n", gIP)
-
-	// If the current public ip and the registered dns ip at godaddy are not the same,
-	// change the value in the godaddy dns record.
-	if pIP != gIP {
-		log.Println("* The ip's are different")
-		gd := goDaddyData{
-			Data: pIP,
-			TTL:  600,
-		}
-
-		// Create the data for header that will be changed
-		gdArray := []goDaddyData{gd}
-		gdJSON, err := json.Marshal(gdArray)
-		if err != nil {
-			log.Println("error: json marshal failed")
-		}
-
-		apiURL := "https://api.godaddy.com/v1/domains/erter.org/records/A/dev"
-
-		// do the api call to set the new ip
-		err = setGodaddyCurrentIP(key, secret, apiURL, string(gdJSON))
-		if err != nil {
-			log.Println("error: setGodaddyCurrent ip = ", err)
-		}
-
-		return nil
+	if err != nil {
+		fmt.Printf("error: failed to get ip from godaddy %v", err)
 	}
 
-	log.Println("The ip's where the same, doing nothing")
+	log.Printf("Current godaddy ip for dev.erter.org = %v\n", gIP)
 
-	return nil
+	// Continously at the given interval check the current public IP,
+	go func() {
+		for {
+			// Wait the interval given before checking current ip
+			<-time.After(interval)
+
+			// Get the current public ip of your connection.
+			p, err := getPublicIP()
+			if err != nil {
+				log.Println("error: public ip: ", err)
+				return
+			}
+			pIPCh <- p
+		}
+	}()
+
+	// Check if changed, and set new value at godaddy if changed.
+	for {
+		pIP := <-pIPCh
+		log.Printf("My IP is:%s\n", pIP)
+
+		// If the current public ip and the registered dns ip at godaddy are not the same,
+		// change the value in the godaddy dns record.
+		if pIP != gIP {
+			log.Println("* The ip's are different")
+			gd := goDaddyData{
+				Data: pIP,
+				TTL:  600,
+			}
+
+			// Create the data for header that will be changed
+			gdArray := []goDaddyData{gd}
+			gdJSON, err := json.Marshal(gdArray)
+			if err != nil {
+				log.Println("error: json marshal failed")
+			}
+
+			apiURL := "https://api.godaddy.com/v1/domains/erter.org/records/A/dev"
+
+			// do the api call to set the new ip
+			err = setGodaddyCurrentIP(key, secret, apiURL, string(gdJSON))
+			if err != nil {
+				log.Println("error: setGodaddyCurrent ip = ", err)
+			}
+
+			gIP = pIP
+		}
+
+	}
 }
 
 func main() {
@@ -155,6 +180,7 @@ func main() {
 	`)
 	key := flag.String("key", "", "the key you got at https://developer.godaddy.com/keys")
 	secret := flag.String("secret", "", "the secret you got at https://developer.godaddy.com/keys")
+	checkInterval := flag.Int("checkInterval", 5, "check interval in seconds")
 	flag.Parse()
 
 	switch *auth {
@@ -173,6 +199,6 @@ func main() {
 	}
 
 	// Run the checking, and eventually edit dns record at godaddy.
-	run(*key, *secret)
+	run(*key, *secret, *checkInterval)
 
 }
