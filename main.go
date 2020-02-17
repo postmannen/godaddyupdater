@@ -33,10 +33,10 @@ func getPublicIP() (string, error) {
 }
 
 // getgodaddyCurrentIP will retrieve the currently registered ip address for a domain at godaddy.
-func getGodaddyCurrentIP(key string, secret string) (string, error) {
+func getGodaddyCurrentIP(key string, secret string, domain string, subDomain string) (string, error) {
 	httpClient := &http.Client{}
 	// Create a get request
-	req, err := http.NewRequest("GET", "https://api.godaddy.com/v1/domains/erter.org/records/A/dev", nil)
+	req, err := http.NewRequest("GET", "https://api.godaddy.com/v1/domains/"+domain+"/records/A/"+subDomain, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed creating request: %v", err)
 	}
@@ -113,18 +113,18 @@ type goDaddyData struct {
 
 // run will orchestrate the checks for finding out if ip's are changed,
 // and change it at godaddy if changed.
-func run(key string, secret string, checkInterval int) {
+func run(key string, secret string, checkInterval int, domain string, subDomain string) {
 	// Convert the check interval from int to Duration.
 	interval := time.Duration(checkInterval) * time.Second
 	pIPCh := make(chan string)
 
 	// get current ip registered at godaddy.
-	gIP, err := getGodaddyCurrentIP(key, secret)
+	gIP, err := getGodaddyCurrentIP(key, secret, domain, subDomain)
 	if err != nil {
 		fmt.Printf("error: failed to get ip from godaddy %v", err)
 	}
 
-	log.Printf("Current godaddy ip for dev.erter.org = %v\n", gIP)
+	log.Printf("Current godaddy ip for "+subDomain+"."+domain+" = %v\n", gIP)
 
 	// Continously at the given interval check the current public IP,
 	go func() {
@@ -163,7 +163,7 @@ func run(key string, secret string, checkInterval int) {
 				log.Println("error: json marshal failed")
 			}
 
-			apiURL := "https://api.godaddy.com/v1/domains/erter.org/records/A/dev"
+			apiURL := "https://api.godaddy.com/v1/domains/" + domain + "/records/A/" + subDomain
 
 			// do the api call to set the new ip
 			err = setGodaddyCurrentIP(key, secret, apiURL, string(gdJSON))
@@ -171,6 +171,9 @@ func run(key string, secret string, checkInterval int) {
 				log.Println("error: setGodaddyCurrent ip = ", err)
 			}
 
+			// We really only need to ask the godaddy API once in the beginning for
+			// the public IP registered for a domain. After that we can keep a local
+			// record for it, and there will be no need ask goDaddy again.
 			gIP = pIP
 		}
 
@@ -187,6 +190,8 @@ func main() {
 	key := flag.String("key", "", "the key you got at https://developer.godaddy.com/keys")
 	secret := flag.String("secret", "", "the secret you got at https://developer.godaddy.com/keys")
 	checkInterval := flag.Int("checkInterval", 5, "check interval in seconds")
+	domain := flag.String("domain", "", `domain name, e.g. -domain="erter.org"`)
+	subDomain := flag.String("subDomain", "", `domain name, e.g. -subDomain="dev"`)
 	flag.Parse()
 
 	switch *auth {
@@ -204,7 +209,17 @@ func main() {
 		}
 	}
 
+	if *domain == "" {
+		log.Println("No domain specified, please specify a domain with the -domain flag.")
+		return
+	}
+
+	if *subDomain == "" {
+		log.Println("No sub domain specified, please specify a sub domain with the -subDomain flag.")
+		return
+	}
+
 	// Run the checking, and eventually edit dns record at godaddy.
-	run(*key, *secret, *checkInterval)
+	run(*key, *secret, *checkInterval, *domain, *subDomain)
 
 }
