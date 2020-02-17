@@ -50,6 +50,7 @@ func getGodaddyCurrentIP(key string, secret string, domain string, subDomain str
 
 	defer resp.Body.Close()
 
+	// If the get request went ok, get the body of the response.
 	var body []byte
 	if resp.StatusCode == http.StatusOK {
 		b, err := ioutil.ReadAll(resp.Body)
@@ -60,6 +61,8 @@ func getGodaddyCurrentIP(key string, secret string, domain string, subDomain str
 		body = b
 	}
 
+	// Godaddy expects the body to be of type JSON array, so we make it into a slice,
+	// so it get's marshaled correctly.
 	GData := []goDaddyData{}
 	json.Unmarshal(body, &GData)
 
@@ -85,8 +88,6 @@ func setGodaddyCurrentIP(key string, secret string, apiURL string, gdData string
 		return fmt.Errorf("failed doing POST: %v", err)
 	}
 
-	// "https://api.godaddy.com/v1/domains/${mydomain}/records/A/${myhostname}"
-
 	defer resp.Body.Close()
 
 	// Read the response, and check if all went OK.
@@ -95,6 +96,7 @@ func setGodaddyCurrentIP(key string, secret string, apiURL string, gdData string
 		log.Println("error: failed reading the response body of the POST: ", err)
 	}
 
+	// Empty string response indicates OK.
 	if string(b) == "" {
 		log.Println("Updating godaddy DNS record, OK")
 	} else {
@@ -183,6 +185,7 @@ func run(key string, secret string, checkInterval int, domain string, subDomain 
 }
 
 func main() {
+	// ----------------------Check Flags-----------------------
 	auth := flag.String("auth", "env", `Use "env" or "flag" for way to get key and secret.\n
 	if value chosen is "flag", use the -key and -secret flags.\
 	if value chosen is "env", set the env variables "goddaddykey" and "godaddysecret"
@@ -218,6 +221,7 @@ func main() {
 		log.Println("No sub domain specified, please specify a sub domain with the -subDomain flag.")
 		return
 	}
+	// -----------------End of Check Flags-----------------------
 
 	// Run the checking, and eventually edit dns record at godaddy.
 	run(*key, *secret, *checkInterval, *domain, *subDomain)
