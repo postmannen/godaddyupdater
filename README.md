@@ -15,4 +15,3 @@ go run main.go -auth="flag" -key="mySecretKey" -secret="mySecretSecret" -checkIn
 ```
 
 NB: Godaddy don't allow faster use of an API endpoint than 60 seconds.
-
