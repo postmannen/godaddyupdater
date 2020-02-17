@@ -95,7 +95,11 @@ func setGodaddyCurrentIP(key string, secret string, apiURL string, gdData string
 		log.Println("error: failed reading the response body of the POST: ", err)
 	}
 
-	log.Println("POST resp body = ", string(b))
+	if string(b) == "" {
+		log.Println("Updating godaddy DNS record, OK")
+	} else {
+		log.Println("Warning: godaddy update problem: ", string(b))
+	}
 
 	return nil
 
@@ -146,7 +150,7 @@ func run(key string, secret string, checkInterval int) {
 		// If the current public ip and the registered dns ip at godaddy are not the same,
 		// change the value in the godaddy dns record.
 		if pIP != gIP {
-			log.Println("* The ip's are different")
+			log.Println("* The ip's are different, preparing to update record at godaddy.")
 			gd := goDaddyData{
 				Data: pIP,
 				TTL:  600,
@@ -169,6 +173,8 @@ func run(key string, secret string, checkInterval int) {
 
 			gIP = pIP
 		}
+
+		log.Println("The ip address have not changed, keeping everything as it is.")
 
 	}
 }
