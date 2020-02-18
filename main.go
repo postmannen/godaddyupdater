@@ -193,8 +193,8 @@ func main() {
 	key := flag.String("key", "", "the key you got at https://developer.godaddy.com/keys")
 	secret := flag.String("secret", "", "the secret you got at https://developer.godaddy.com/keys")
 	checkInterval := flag.Int("checkInterval", 5, "check interval in seconds")
-	domain := flag.String("domain", "", `domain name, e.g. -domain="erter.org"`)
-	subDomain := flag.String("subDomain", "", `domain name, e.g. -subDomain="dev"`)
+	domain := flag.String("domain", "", `domain name, e.g. -domain="erter.org. NB: If you want to update the main domain like erter.org use "@" as value with the subDomain flag like  -subDomain="@""`)
+	subDomain := flag.String("subDomain", "", `domain name, e.g. -subDomain="dev". NB: If you want to update the main domain like erter.org use "@" as value like -subDomain="@"`)
 	flag.Parse()
 
 	switch *auth {
