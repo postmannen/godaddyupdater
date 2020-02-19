@@ -4,7 +4,7 @@ Godaddy dns auto updater. Checks if your public ip have changed, and updates god
 
 ## About
 
-* Supports given as env variables, or provided via flags.
+* Supports key and secret for godaddy API given as env variables, or provided via flags.
 * Built in run scheduler so no need for Cron. Interval set via flag value.
 * Can update both main domain, or sub domain records.
 
