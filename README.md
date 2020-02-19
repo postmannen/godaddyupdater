@@ -2,6 +2,32 @@
 
 Godaddy dns auto updater. Checks if your public ip have changed, and updates godaddy dns record if changed.
 
+## About
+
+* Supports given as env variables, or provided via flags.
+* Built in run scheduler so no need for Cron. Interval set via flag value.
+* Can update both main domain, or sub domain records.
+
+## flags
+
+``` bash
+  -auth string
+    	Use "env" or "flag" for way to get key and secret.\n
+    	if value chosen is "flag", use the -key and -secret flags.\
+    	if value chosen is "env", set the env variables "goddaddykey" and "godaddysecret"
+    	 (default "env")
+  -checkInterval int
+    	check interval in seconds (default 5)
+  -domain string
+    	domain name, e.g. -domain="erter.org. NB: If you want to update the main domain like erter.org use "@" as value with the subDomain flag like  -subDomain="@""
+  -key string
+    	the key you got at https://developer.godaddy.com/keys
+  -secret string
+    	the secret you got at https://developer.godaddy.com/keys
+  -subDomain string
+    	domain name, e.g. -subDomain="dev". NB: If you want to update the main domain like erter.org use "@" as value like -subDomain="@"
+```
+
 ## Example
 
 ```bash
