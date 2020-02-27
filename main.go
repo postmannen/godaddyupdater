@@ -19,14 +19,27 @@ func getPublicIP() (string, error) {
 	// http://myexternalip.com
 	// http://api.ident.me
 	// http://whatismyipaddress.com/api
-	resp, err := http.Get(url)
-	if err != nil {
-		return "", fmt.Errorf("failed getting public ip %v", err)
-	}
-	defer resp.Body.Close()
-	ip, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed reading public ip body %v", err)
+	var ip []byte
+
+	for {
+		resp, err := http.Get(url)
+		if err != nil {
+			log.Printf("failed getting public ip %v\n", err)
+			log.Println("Sleeping for some seconds before retrying......")
+			time.Sleep(time.Second * 30)
+			continue
+		}
+		defer resp.Body.Close()
+		ip, err = ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Printf("failed reading public ip body %v", err)
+			log.Println("Sleeping for some seconds before retrying......")
+			time.Sleep(time.Second * 30)
+			continue
+		}
+
+		// If all above was ok we break out...
+		break
 	}
 
 	return string(ip), nil
