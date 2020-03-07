@@ -47,3 +47,30 @@ go run main.go -auth="flag" -key="mySecretKey" -secret="mySecretSecret" -checkIn
 ```
 
 NB: Godaddy don't allow faster use of an API endpoint than 60 seconds.
+
+## Dockerize it
+
+### Create an image
+
+Change the startup options like Domain, Prometheus listen port, or scheduled intervals, edit the appropriate settings in the `Dockerfile` before building.
+Current defaults are :
+`CMD ["/app/main", "-auth=env" ,"-checkInterval=99" ,"-domain=erter.org" ,"-subDomain=dev" ,"-promExpPort=9101"]`
+
+From the repository folder:
+`docker image build -t godaddyupdater:1.0 .`
+
+### Run the container
+
+Create a file for the environment variables, for example `env.env` like this:
+
+```text
+godaddykey=supersecretkey
+godaddysecret=supersecretsecret
+```
+
+Then run the docker container:
+`docker run -it --env-file env.env -p 9101:9101 godaddyupdater:1.0`
+
+To make it start in daemon mode:
+`docker run -d --env-file env.env -p 9101:9101 godaddyupdater:1.0`
+
