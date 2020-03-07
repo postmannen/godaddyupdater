@@ -138,7 +138,7 @@ type goDaddyData struct {
 
 // run will orchestrate the checks for finding out if ip's are changed,
 // and change it at godaddy if changed.
-func run(key string, secret string, checkInterval int, domain string, subDomain string, s *server) {
+func run(key string, secret string, checkInterval int, domain string, subDomain string, s *server) error {
 	// Convert the check interval from int to Duration.
 	interval := time.Duration(checkInterval) * time.Second
 	pIPCh := make(chan string)
@@ -146,9 +146,12 @@ func run(key string, secret string, checkInterval int, domain string, subDomain 
 	// get current ip registered at godaddy.
 	gIP, err := getGodaddyCurrentIP(key, secret, domain, subDomain)
 	if err != nil {
-		fmt.Printf("error: failed to get ip from godaddy %v\n", err)
+		log.Printf("error: failed to get ip from godaddy %v\n", err)
 	}
 
+	if gIP == "" && err != nil {
+		return fmt.Errorf("the ip value returned from godaddy returned blank, credential issue ?")
+	}
 	log.Printf("Current godaddy ip for "+subDomain+"."+domain+" = %v\n", gIP)
 
 	// Continously at the given interval check the current public IP,
@@ -170,7 +173,7 @@ func run(key string, secret string, checkInterval int, domain string, subDomain 
 	// Check if changed, and set new value at godaddy if changed.
 	for {
 		pIP := <-pIPCh
-		log.Printf("My IP is:%s\n", pIP)
+		log.Printf("My current locally detected public IP is:%s\n", pIP)
 
 		// If the current public ip and the registered dns ip at godaddy are not the same,
 		// change the value in the godaddy dns record.
@@ -223,6 +226,8 @@ func newServer() *server {
 	return &s
 }
 
+// startPrometheus will start the http listener for the
+// prometheus exporter.
 func (s *server) startPrometheus(port string) {
 	go func() {
 		http.Handle("/metrics", promhttp.Handler())
@@ -230,50 +235,87 @@ func (s *server) startPrometheus(port string) {
 	}()
 }
 
-func main() {
-	// ----------------------Check Flags-----------------------
-	auth := flag.String("auth", "env", `Use "env" or "flag" for way to get key and secret.\n
-	if value chosen is "flag", use the -key and -secret flags.\
-	if value chosen is "env", set the env variables "goddaddykey" and "godaddysecret"
+type flags struct {
+	auth          string
+	key           string
+	secret        string
+	checkInterval int
+	domain        string
+	subDomain     string
+	promExpPort   string
+}
+
+func newFlags() *flags {
+	auth := flag.String("auth", "env",
+		`Use "env" or "flag" for way to get key and secret.
+		If value chosen is "flag", use the -key and -secret flags.
+		If value chosen is "env", set the env variables "goddaddykey" and "godaddysecret".
 	`)
 	key := flag.String("key", "", "the key you got at https://developer.godaddy.com/keys")
 	secret := flag.String("secret", "", "the secret you got at https://developer.godaddy.com/keys")
 	checkInterval := flag.Int("checkInterval", 5, "check interval in seconds")
-	domain := flag.String("domain", "", `domain name, e.g. -domain="erter.org. NB: If you want to update the main domain like erter.org use "@" as value with the subDomain flag like  -subDomain="@""`)
-	subDomain := flag.String("subDomain", "", `domain name, e.g. -subDomain="dev". NB: If you want to update the main domain like erter.org use "@" as value like -subDomain="@"`)
-	promExpPort := flag.String("promExpPort", "2112", `The port number to run the prometheus exporter on written as a string value. Default : -promExpPort="2112"`)
+	domain := flag.String("domain", "",
+		`domain name, e.g. -domain="erter.org. NB: If you want to update the main domain like erter.org use "@" as value with the subDomain flag like  -subDomain="@""`)
+	subDomain := flag.String("subDomain", "",
+		`domain name, e.g. -subDomain="dev". NB: If you want to update the main domain like erter.org use "@" as value like -subDomain="@"`)
+	promExpPort := flag.String("promExpPort", "2112",
+		`The port number to run the prometheus exporter on written as a string value. Default : -promExpPort="2112"`)
 	flag.Parse()
 
-	switch *auth {
+	// Dereference all the pointer values and put them in as struct values.
+	f := flags{
+		auth:          *auth,
+		key:           *key,
+		secret:        *secret,
+		checkInterval: *checkInterval,
+		domain:        *domain,
+		subDomain:     *subDomain,
+		promExpPort:   *promExpPort,
+	}
+
+	return &f
+}
+
+func checkFlags(f *flags) error {
+	switch f.auth {
 	case "env":
-		*key = os.Getenv("godaddykey")
-		*secret = os.Getenv("godaddysecret")
-		if *key == "" || *secret == "" {
-			log.Println("method env chosen, and you need to set key and secret")
-			return
+		log.Println("Info: Using default auth method env")
+		f.key = os.Getenv("godaddykey")
+		f.secret = os.Getenv("godaddysecret")
+		if f.key == "" || f.secret == "" {
+			return fmt.Errorf("method env chosen, and you need to set key and secret")
 		}
 	case "flag":
-		if *key == "" || *secret == "" {
-			log.Println("method flag chosen, and you need to set key and secret")
-			return
+		if f.key == "" || f.secret == "" {
+			return fmt.Errorf("method flag chosen, and you need to set key and secret")
 		}
 	}
 
-	if *domain == "" {
-		log.Println("No domain specified, please specify a domain with the -domain flag.")
-		return
+	if f.domain == "" {
+		return fmt.Errorf("No domain specified, please specify a domain with the -domain flag")
 	}
 
-	if *subDomain == "" {
-		log.Println("No sub domain specified, please specify a sub domain with the -subDomain flag.")
+	if f.subDomain == "" {
+		return fmt.Errorf("No sub domain specified, please specify a sub domain with the -subDomain flag")
+	}
+
+	return nil
+}
+
+func main() {
+	// get the flags entered when starting the program
+	f := newFlags()
+
+	err := checkFlags(f)
+	if err != nil {
+		log.Printf("error: %v\n", err)
 		return
 	}
-	// -----------------End of Check Flags-----------------------
 
 	s := newServer()
-	s.startPrometheus(*promExpPort)
+	s.startPrometheus(f.promExpPort)
 
 	// Run the checking, and eventually edit dns record at godaddy.
-	run(*key, *secret, *checkInterval, *domain, *subDomain, s)
+	run(f.key, f.secret, f.checkInterval, f.domain, f.subDomain, s)
 
 }
