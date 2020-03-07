@@ -60,8 +60,11 @@ func getGodaddyCurrentIP(key string, secret string, domain string, subDomain str
 	if err != nil {
 		return "", fmt.Errorf("failed getting response: %v", err)
 	}
-
 	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("wrong status code %v", resp.Status)
+	}
 
 	// If the get request went ok, get the body of the response.
 	var body []byte
@@ -136,7 +139,7 @@ func run(key string, secret string, checkInterval int, domain string, subDomain 
 	// get current ip registered at godaddy.
 	gIP, err := getGodaddyCurrentIP(key, secret, domain, subDomain)
 	if err != nil {
-		fmt.Printf("error: failed to get ip from godaddy %v", err)
+		fmt.Printf("error: failed to get ip from godaddy %v\n", err)
 	}
 
 	log.Printf("Current godaddy ip for "+subDomain+"."+domain+" = %v\n", gIP)
