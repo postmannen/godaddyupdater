@@ -7,8 +7,11 @@ Godaddy dns auto updater. Checks if your public ip have changed, and updates god
 * Supports key and secret for godaddy API given as env variables, or provided via flags.
 * Built in run scheduler so no need for Cron. Interval set via flag value.
 * Can update both main domain, or sub domain records.
+* Prometheus Exporter for exporting time series data of line status.
 
 ## flags
+
+Default is to use env variables for both godaddy key and secret.
 
 ``` bash
   -auth string
@@ -26,6 +29,8 @@ Godaddy dns auto updater. Checks if your public ip have changed, and updates god
     the secret you got at https://developer.godaddy.com/keys
   -subDomain string
     domain name, e.g. -subDomain="dev". NB: If you want to update the main domain like erter.org use "@" as value like -subDomain="@"
+  -promExpPort string
+    The port number to run the prometheus exporter on written as a string value. Default : -promExpPort="2112" (default "2112")
 ```
 
 ## Example
