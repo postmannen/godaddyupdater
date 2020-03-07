@@ -10,10 +10,14 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // getPublicIP will get the public ip from ipify.org
-func getPublicIP() (string, error) {
+func (s *server) getPublicIP() (string, error) {
 	url := "https://api.ipify.org?format=text" // we are using a pulib IP API, we're using ipify here, below are some others
 	// https://www.ipify.org
 	// http://myexternalip.com
@@ -26,6 +30,7 @@ func getPublicIP() (string, error) {
 		if err != nil {
 			log.Printf("failed getting public ip %v\n", err)
 			log.Println("Sleeping for some seconds before retrying......")
+			s.internetOK.Set(0)
 			time.Sleep(time.Second * 30)
 			continue
 		}
@@ -34,6 +39,7 @@ func getPublicIP() (string, error) {
 		if err != nil {
 			log.Printf("failed reading public ip body %v", err)
 			log.Println("Sleeping for some seconds before retrying......")
+			s.internetOK.Set(0)
 			time.Sleep(time.Second * 30)
 			continue
 		}
@@ -42,6 +48,7 @@ func getPublicIP() (string, error) {
 		break
 	}
 
+	s.internetOK.Set(1)
 	return string(ip), nil
 }
 
@@ -131,7 +138,7 @@ type goDaddyData struct {
 
 // run will orchestrate the checks for finding out if ip's are changed,
 // and change it at godaddy if changed.
-func run(key string, secret string, checkInterval int, domain string, subDomain string) {
+func run(key string, secret string, checkInterval int, domain string, subDomain string, s *server) {
 	// Convert the check interval from int to Duration.
 	interval := time.Duration(checkInterval) * time.Second
 	pIPCh := make(chan string)
@@ -151,7 +158,7 @@ func run(key string, secret string, checkInterval int, domain string, subDomain 
 			<-time.After(interval)
 
 			// Get the current public ip of your connection.
-			p, err := getPublicIP()
+			p, err := s.getPublicIP()
 			if err != nil {
 				log.Println("error: public ip: ", err)
 				return
@@ -200,6 +207,29 @@ func run(key string, secret string, checkInterval int, domain string, subDomain 
 	}
 }
 
+type server struct {
+	internetOK prometheus.Gauge
+}
+
+func newServer() *server {
+	s := server{
+		internetOK: promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "internet_ok",
+			Help: "Internet up or down",
+		}),
+	}
+	// set default to ok
+	s.internetOK.Set(1)
+	return &s
+}
+
+func (s *server) startPrometheus(port string) {
+	go func() {
+		http.Handle("/metrics", promhttp.Handler())
+		http.ListenAndServe(":"+port, nil)
+	}()
+}
+
 func main() {
 	// ----------------------Check Flags-----------------------
 	auth := flag.String("auth", "env", `Use "env" or "flag" for way to get key and secret.\n
@@ -211,6 +241,7 @@ func main() {
 	checkInterval := flag.Int("checkInterval", 5, "check interval in seconds")
 	domain := flag.String("domain", "", `domain name, e.g. -domain="erter.org. NB: If you want to update the main domain like erter.org use "@" as value with the subDomain flag like  -subDomain="@""`)
 	subDomain := flag.String("subDomain", "", `domain name, e.g. -subDomain="dev". NB: If you want to update the main domain like erter.org use "@" as value like -subDomain="@"`)
+	promExpPort := flag.String("promExpPort", "2112", `The port number to run the prometheus exporter on written as a string value. Default : -promExpPort="2112"`)
 	flag.Parse()
 
 	switch *auth {
@@ -239,7 +270,10 @@ func main() {
 	}
 	// -----------------End of Check Flags-----------------------
 
+	s := newServer()
+	s.startPrometheus(*promExpPort)
+
 	// Run the checking, and eventually edit dns record at godaddy.
-	run(*key, *secret, *checkInterval, *domain, *subDomain)
+	run(*key, *secret, *checkInterval, *domain, *subDomain, s)
 
 }
